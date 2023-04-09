@@ -1,0 +1,30 @@
+version: '3.8'
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    hostname: mockingbird
+    container_name: mockingbird
+    image: mockingbird:latest
+    restart: always
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/app
+
+  postgres_db:
+    image: postgres:latest
+    container_name: postgres
+    hostname: postgres
+    ports:
+        - "5432:5432"
+    volumes:
+        - mockdb_volume:/var/lib/postgresql/data
+    environment:
+        POSTGRES_USER: somu
+        POSTGRES_PASSWORD: "mypwd"
+        POSTGRES_DB: mockdb
+
+volumes:
+  mockdb_volume:

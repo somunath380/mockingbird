@@ -1,0 +1,6 @@
+psycopg2-binary
+sanic
+requests
+sqlalchemy
+psycopg2
+marshmallow
