@@ -3,6 +3,7 @@ from sanic.response import json
 from sanic import response
 import os
 import aiofiles
+import multiprocessing
 from db.setup_db import check_or_create_tables, close_all_db_sessions
 from sanic.log import logger
 from urls import blueprint_v1

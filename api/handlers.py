@@ -6,7 +6,7 @@ from db.models import Url, User
 from validations.validate import UserSchema, UrlSchema
 from api.helper import encrypt_pwd
 from db.connection import get_session
-from api.decorators import check_user, is_authorized, check_url
+from api.decorators import check_existing_user, is_authorized, check_existing_url, is_admin
 from sanic.log import logger
 import os
 from api.helper import create_file_path, write_to_file
@@ -15,8 +15,22 @@ import json
 default_folder_name = 'uploads'
 
 class UserView(BaseHandler):
-    decorators = [is_authorized()]
+
+    @is_authorized
     async def get(self, request, *args, **kwargs):
+        """Get user details handler.
+        
+        This handler returns all existing users data by taking user_id or username
+        given in the request params. Uses Basic Auth to authorize request.
+
+        Args: 
+            request (object): request object received.
+        
+        Returns:
+            json: 
+                username: str
+                id: int.
+        """
         session = get_session()
         try:
             args: Dict = request.args
@@ -41,7 +55,19 @@ class UserView(BaseHandler):
         finally:
             session.close()
     
+    @is_authorized
     async def delete(self, request, *args, **kwargs):
+        """Delete user details handler.
+        
+        This handler deletes specified users data by taking username
+        from the authorization. Uses Basic Auth to authorize request.
+
+        Args: 
+            request (object): request object received.
+        
+        Returns:
+            json.
+        """
         session = get_session()
         try:
             username = kwargs.get("username")
@@ -55,8 +81,14 @@ class UserView(BaseHandler):
             session.close()
 
 class RegisterUser(BaseHandler):
-    decorators = [check_user()]
+    @check_existing_user
     async def post(self, request):
+        """Create user handler.
+        
+        This handler will create new user.
+        
+        Args:
+            request"""
         session = get_session()
         try:
             data: Dict = request.json
@@ -76,8 +108,21 @@ class RegisterUser(BaseHandler):
             session.close()
 
 class UploadFileHandler(BaseHandler):
-    decorators = [is_authorized(), check_url()]
+    @is_authorized
+    @check_existing_url()
     async def post(self, request, *args, **kwargs):
+        """Upload file handler.
+        
+        This handler uploads file in the server against given url.
+        Uses Basic Auth to authorize request.
+        Args: 
+            request (object): request object received.
+        
+        Returns:
+            json: 
+                username: str
+                id: int.
+        """
         try:
             user_id = kwargs.get("id")
             data = request.form
@@ -124,9 +169,16 @@ class UploadFileHandler(BaseHandler):
         finally:
             session.close()
 
+    @is_authorized
+    @is_admin
+    async def delete(self, request, *args, **kwargs):
+        files = os.path.join(os.getcwd(), 'files')
+        os.system(f'rm -rf {files}')
+        return self._send_response(200, True, response_msg="server storage for all files deleted")
 
 class AddUrlHandler(BaseHandler):
-    decorators = [is_authorized(), check_url(json_format=True)]
+    @is_authorized
+    @check_existing_url(json_format=True)
     async def post(self, request, *args, **kwargs):
         user_id = kwargs.get("id")
         data = request.json
@@ -165,7 +217,7 @@ class AddUrlHandler(BaseHandler):
             session.close()
 
 class GetUrlHandler(BaseHandler):
-    decorators = [is_authorized()]
+    @is_authorized
     async def get(self, request, *args, **kwargs):
         session = get_session()
         try:
@@ -190,7 +242,8 @@ class GetUrlHandler(BaseHandler):
             return self._send_response(500, success=False, error_code=500, error_msg=exe)
         finally:
             session.close()
-
+    
+    @is_authorized
     async def delete(self, request, *args, **kwargs):
         session = get_session()
         try:
