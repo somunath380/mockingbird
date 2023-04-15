@@ -1,45 +1,61 @@
-from typing import Dict
-import hashlib
+from typing import Dict, Text
 import os
 import aiofiles
 from sanic.log import logger
 
+
 async def create_basedir():
-    current_dir = os.getcwd()
-    logger.info(f"current directory {current_dir}")
-    global_folder = os.path.abspath(os.path.join(current_dir, os.pardir))
-    logger.info(f"global directory {global_folder}")
-    global_folder_path = os.path.join(current_dir, 'files')
-    logger.info("checking files folder")
+    """Creates the base directory where the files will be stored.
+    Args: 
+        None.
+    Returns:
+        basedir (str): location path."""
+    current_dir: Text = os.getcwd()
+    logger.info(f"create_basedir, current directory {current_dir}")
+    global_folder: Text = os.path.abspath(os.path.join(current_dir, os.pardir))
+    logger.info(f"create_basedir, global directory {global_folder}")
+    global_folder_path: Text = os.path.join(current_dir, 'files')
+    logger.info("create_basedir, checking files folder")
     if not os.path.exists(global_folder_path):
-        logger.info("created files folder")
+        logger.info("create_basedir, created files folder")
         os.mkdir(global_folder_path)
-    logger.info("files folder already exisis")
-    basedir = global_folder_path
+    logger.info("create_basedir, files folder already exisis")
+    basedir: Text = global_folder_path
     return basedir
 
-async def encrypt_pwd(user_details: Dict) -> str:
-    username = user_details.get("username")
-    password = user_details.get("password")
-    userdetails: str = (username + password).encode("utf-8")
-    secret = hashlib.sha256(userdetails).hexdigest()
-    return secret
 
 async def create_file_path(filename, foldername):
-    basedir = await create_basedir()
+    """Creates the location path where the file will be saved in the server.
+    Args:
+        filename (str): name of the file.
+        foldername (str): name of the folder.
+    Returns:
+        filepath (str): location path."""
+
+    basedir: Text = await create_basedir()
+    logger.info(f"create_file_path, basedir: {basedir}")
     if not os.path.exists(basedir):
+        logger.info(f"create_file_path, creating basedir: {basedir}")
         os.mkdir(basedir)
-    upload_folder_path = os.path.join(basedir, foldername)
+    upload_folder_path: Text = os.path.join(basedir, foldername)
+    logger.info(f"upload_folder_path, {upload_folder_path}")
     if not os.path.exists(upload_folder_path):
-        upload_folder_path = os.path.join(basedir, foldername)
+        logger.info(f"upload_folder_path, creating...")
+        upload_folder_path: Text = os.path.join(basedir, foldername)
         os.mkdir(upload_folder_path)
-    filepath = os.path.join(upload_folder_path, filename)
+    filepath: Text = os.path.join(upload_folder_path, filename)
+    logger.info(f"create_file_path, filepath: {filepath}")
     return filepath
 
+
 async def write_to_file(filepath, file_obj):
+    """Writes the file contents to the specified filepath.
+    Args:
+        filepath (str): filepath.
+        file_obj (object): file object from request.file object"""
     async with aiofiles.open(filepath, 'wb') as file:
         await file.write(file_obj.body)
     if not os.access(filepath, os.X_OK):
-        current_permissions = os.stat(filepath).st_mode
-        new_permissions = current_permissions | 0o100
+        current_permissions: int = os.stat(filepath).st_mode
+        new_permissions: int = current_permissions | 0o100
         os.chmod(filepath, new_permissions)

@@ -15,7 +15,7 @@ class BaseHandler(HTTPMethodView):
         if status_code == 200:
             response = {"success": success, "message": response_msg, "data": data}
         elif status_code == 404 or status_code == 400:
-            response = {"success": success, "message": response_msg}
+            response = {"success": success, "message": response_msg, "data": data}
         elif status_code == 500:
             response = {"success": False}
         if error_msg:

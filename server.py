@@ -1,22 +1,32 @@
 from sanic import Sanic
 from sanic.response import json
-from sanic import response
-import os
-import aiofiles
-import multiprocessing
 from db.setup_db import check_or_create_tables, close_all_db_sessions
-from sanic.log import logger
 from urls import blueprint_v1
+from sanic.log import logger
 
 app = Sanic(__name__)
 app.blueprint(blueprint_v1)
 
 @app.listener("before_server_start")
 async def connect_to_db(app):
+    """Connects to the database.
+    
+    Args:
+        app (object): the sanic application object.
+
+    Returns:
+        None."""
     await check_or_create_tables()
 
 @app.listener("before_server_stop")
 async def close_db_connection(app):
+    """Closes db connections before stopping the server.
+    
+    Args:
+        app (object): sanic application object. 
+        
+    Returns:
+        None."""
     await close_all_db_sessions()
 
 @app.route('/', methods=['GET'])

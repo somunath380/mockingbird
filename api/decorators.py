@@ -1,110 +1,110 @@
-from validations.validate import UserSchema
 from typing import Dict, Text
-from db.models import User, Url
-from sanic.response import json
-import base64
-from api.helper import encrypt_pwd
+from db.models import Url
+import os
+from sanic.response import json as sanic_json
+from sanic.log import logger
 from db.connection import get_session
 from functools import wraps
+from common.constants import HTTP_401, HTTP_403, MAX_FILE_SIZE
+from api.helper import create_basedir
 
 
 def is_authorized(func):
-    """Middleware to check if the request is authorized for processing."""
+    """Middleware to check if the request is authorized for processing.
+    Args: 
+        None.
+    Returns:
+        Sanic Response object or Handler Function.
+    """
     @wraps(func)
     async def wrapper(self, request, *args, **kwargs):
-        session = get_session()
         try:
-            auth_header = request.headers.get("Authorization")
+            auth_header: Text = request.headers.get("Authorization", None)
             if auth_header is None:
-                return json({"status": False, "message": "unable to Authorize"}, 400)
-            auth_decoded = base64.b64decode(auth_header[6:]).decode()
-            username, password = auth_decoded.split(":")
-            user_obj = session.query(User).filter(User.username == username).first()
-            if not user_obj:
-                return json({"success": False, "message": "no user found"}, status=404)
+                logger.info("is_authorized, Invalid Authorization")
+                return sanic_json({"status": False, "message": "Invalid Authorization"}, HTTP_401)
+            api_auth: Text = auth_header[6:]
+            if api_auth != os.environ.get("API_AUTH"):
+                logger.info("is_authorized, Invalid Authorization")
+                return sanic_json({"status": False, "message": "Invalid Authorization"}, HTTP_401)
             else:
-                db_pwd = user_obj.password
-                encrypted_pwd = await encrypt_pwd(user_details={"username":username, "password":password})
-                if encrypted_pwd == db_pwd:
-                    kwargs.update(
-                        {
-                            "id": user_obj.id,
-                            "username": username,
-                            "password": encrypted_pwd
-                        }
-                    )
-                    return await func(self, request, *args, **kwargs)
-            return json({"status": False, "message": "UnAuthorized User"}, 401)
+                logger.info("is_authorized, Connection Authorized.")
+                return await func(self, request, *args, **kwargs)
         except Exception as exe:
-            session.rollback()
-            return json({"status": False, "message": "Invalid Authentication", "error": exe}, 403)
-        finally:
-            session.close()
+            logger.error(f"is_authorized, error occured {exe}")
+            return sanic_json({"status": False, "message": "Invalid Authentication", "error": exe}, HTTP_403)
     return wrapper
-
-
-
-def check_existing_user(func):
-    """Middleware to check if user already exists or not."""
-    @wraps(func)
-    async def wrapper(self, request, *args, **kwargs):
-        session = get_session()
-        try:
-            request_data: Dict = request.json
-            request_data = UserSchema().load(request_data)
-            username: Text = request_data.get("username")
-            user_obj = session.query(User).filter(User.username == username).first()
-            if user_obj:
-                return json({"status": False, "message": "user with username {} already exists".format(username)})
-            return await func(self, request, *args, **kwargs)
-        except Exception:
-            session.rollback()
-        finally:
-            session.close()
-    return wrapper
-
 
 
 def check_existing_url(json_format=False):
     """Middleware to check if the url already exists or not.
+    Args:
+        json_format (bool): Default False.
+    Returns:
+        Sanic Response object or Handler Function.
     """
     def decorator(func):
         @wraps(func)
         async def wrapper(self, request, *args, **kwargs):
             if json_format:
-                url_identifier = request.json.get("identifier")
+                url_identifier: Text = request.json.get("identifier")
+                request_url: Text = request.json.get("url")
             else:
-                url_identifier = request.form.get("identifier")
+                url_identifier: Text = request.form.get("identifier")
+                request_url: Text = request.form.get("url")
+            logger.info(f"check_existing_url, url_identifier: {url_identifier}")
             if not url_identifier:
-                return json({"status": False, "message": "URL Identifier is required"}, 403)
-            session = get_session()
+                return sanic_json({"status": False, "message": "URL Identifier required"}, HTTP_403)
+            if not request_url:
+                return sanic_json({"status": False, "message": "URL required"}, HTTP_403)
+            session: object = get_session()
             try:
-                urls = session.query(Url).filter(Url.identifier==url_identifier).all()
-                if urls:
-                    return json({"status": False, "message": "given URL with identifier {} already exists!".format(url_identifier)}, 403)
+                url_obj: object = session.query(Url).filter(Url.identifier==url_identifier).first()
+                if url_obj:
+                    return sanic_json({"status": False, "message": "given URL with identifier {} already exists!".format(url_identifier)}, HTTP_403)
+                url_obj: object = session.query(Url).filter(Url.url==request_url).first()
+                if url_obj:
+                    return sanic_json({"status": False, "message": "given URL {} already exists!".format(request_url)}, HTTP_403)
                 return await func(self, request, *args, **kwargs)
             except Exception as exe:
+                logger.error(f"check_existing_url, error: {exe}")
                 session.rollback()
-                return json({"status": False, "message": "Invalid Authentication", "error": exe}, 403)
+                return sanic_json({"status": False, "message": "Invalid Authentication", "error": exe}, HTTP_403)
             finally:
+                logger.info("check_existing_url, closing session")
                 session.close()
         return wrapper
     return decorator
 
 
-def is_admin(func):
+def check_file(func):
+    """Middleware to check file object that is being uploaded.
+    Args: 
+        None.
+    Returns:
+        Sanic Response object or Handler Function.
+    """
     @wraps(func)
     async def wrapper(self, request, *args, **kwargs):
-        session = get_session()
-        try:
-            user_id = kwargs["id"]
-            print(user_id)
-            admin = session.query(User).filter(User.id == 1).first()
-            if admin.id != user_id:
-                return json({"success": False, "message": "user is not admin"}, 400)
-            return await func(self, request, *args, **kwargs) 
-        except Exception as ex:
-            session.rollback()
-        finally:
-            session.close()
+        file_obj: object = request.files.get("file")
+        filename: Text = file_obj.name
+        if not filename:
+            return sanic_json({"status": False, "message": "File required"}, HTTP_401)
+        if len(os.path.splitext(filename)[0]) > 15:
+            return sanic_json({"status": False, "message": "File name length must be below 15 characters"}, HTTP_401)
+        logger.info(f"check_file, filename: {filename}")
+        basedir: Text = await create_basedir()
+        logger.info(f"check_file, basedir: {basedir}")
+        filepath = os.path.join(basedir, "uploads", filename)
+        if os.path.exists(filepath):
+            logger.info(f"check_file, file with given name {filename} already exists")
+            return sanic_json({"status": False, "message": f"file with given name {filename} already exists"}, HTTP_401)
+        file_name, file_extension = os.path.splitext(filepath)
+        logger.info(f"check_file, file extension: {file_extension}")
+        allowed_extensions = [".py", ".pdf"]
+        if file_extension not in allowed_extensions:
+            return sanic_json({"status": False, "message": f"only {allowed_extensions} files allowed"}, HTTP_401)
+        if len(file_obj.body) <= 0 or len(file_obj.body) >= MAX_FILE_SIZE:
+            return sanic_json({"status": False, "message": "file size too large"}, HTTP_401)
+        return await func(self, request, *args, **kwargs)
     return wrapper
