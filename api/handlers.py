@@ -180,19 +180,30 @@ class UrlHandler(BaseHandler):
 async def handle_request(request, path):
     session = get_session()
     try:
+        # request_data: Dict = request.json
+        # logger.info("handle_request, request data: ", {
+        #     "url": request_data.get("url"),
+        #     "payload": request_data.get("body"),
+        #     "method": request_data.get("method"),
+        #     "args": request_data.get("args")
+        # })
         url_obj = session.query(Url).filter(Url.url == path).first()
+        logger.info("handle_request, url_obj: ", url_obj)
         # If url path is not stored in db
         if not url_obj:
-            return sanic_json({"success": False, "message": "no url found"}, 404)
+            logger.info("handle_request, no url found.")
+            return sanic_json({"success": False, "message": "no url found"}, HTTP_404)
         # if url path is stored in db
         method = url_obj.method
         # if request method doesn't match the method in db
         if method != request.method:
-            return sanic_json({"success": False, "message": "url does not support {} method".format(request.method)}, 400)
+            logger.info(f"requested url method {request.method} doesn't match stored url method {url_obj.method}")
+            return sanic_json({"success": False, "message": "url does not support {} method".format(request.method)}, HTTP_404)
         # if no filepath is stored in db then its a normal json response
         if not url_obj.filepath:
-            return sanic_json(url_obj.response, 200, headers={"Content-type": "application/json"})
-        # if execute is false then its a file to be responsed
+            logger.info(f"handle_request, filepath: {url_obj.filepath}, sending response: {url_obj.response}")
+            return sanic_json(url_obj.response, HTTP_200, headers={"Content-type": "application/json"})
+        # if execute is false then its a content file to be responsed
         if not url_obj.execute:
             filepath = os.path.join(os.getcwd(), url_obj.filepath)
             cwd = os.getcwd()
@@ -209,10 +220,11 @@ async def handle_request(request, path):
                 # mime_type="application/metalink4+xml",
                 headers=response_headers
             )
-        
     except Exception as ex:
         session.rollback()
-        return sanic_json({"success": False, "error_msg": ex})
+        logger.exception(f"handle_request, exception: {ex}")
+        return sanic_json({"success": False, "error": HTTP_500, "error_message": ex}, HTTP_500)
     finally:
+        logger.info("handle_request, closing session")
         session.close()
 
