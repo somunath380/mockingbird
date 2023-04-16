@@ -2,7 +2,8 @@ from typing import Dict, Text
 import os
 import aiofiles
 from sanic.log import logger
-
+import subprocess
+from common.constants import MAX_EXECUTION_TIME
 
 async def create_basedir():
     """Creates the base directory where the files will be stored.
@@ -59,3 +60,21 @@ async def write_to_file(filepath, file_obj):
         current_permissions: int = os.stat(filepath).st_mode
         new_permissions: int = current_permissions | 0o100
         os.chmod(filepath, new_permissions)
+
+
+async def execute_file(filepath):
+    try:
+        logger.info("execute_file, executing the file {}".format(filepath))
+        result = subprocess.run(["python", filepath], check=True, timeout=MAX_EXECUTION_TIME, capture_output=True).stdout.decode("utf-8")
+        logger.info("execute_file, file execution complete")
+        return eval(result)
+    except FileNotFoundError as exe:
+        logger.exception(f"execute_file, FileNotFoundError: {exe}")
+        return {}
+    except subprocess.CalledProcessError as exe:
+        logger.exception(f"execute_file, return_code: {exe.returncode}, CalledProcessError: {exe}")
+        return {}
+    except subprocess.TimeoutExpired as exe:
+        logger.exception(f"execute_file, TimeoutExpired: {exe}")
+        return {}
+

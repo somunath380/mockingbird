@@ -8,7 +8,7 @@ from db.connection import get_session
 from api.decorators import is_authorized, check_existing_url, check_file
 from sanic.log import logger
 import os
-from api.helper import create_file_path, write_to_file
+from api.helper import create_file_path, write_to_file, execute_file
 import json
 from common.constants import HTTP_500, HTTP_200, HTTP_404
 
@@ -180,15 +180,8 @@ class UrlHandler(BaseHandler):
 async def handle_request(request, path):
     session = get_session()
     try:
-        # request_data: Dict = request.json
-        # logger.info("handle_request, request data: ", {
-        #     "url": request_data.get("url"),
-        #     "payload": request_data.get("body"),
-        #     "method": request_data.get("method"),
-        #     "args": request_data.get("args")
-        # })
         url_obj = session.query(Url).filter(Url.url == path).first()
-        logger.info("handle_request, url_obj: ", url_obj)
+        # logger.info("handle_request, url_obj: ", url_obj)
         # If url path is not stored in db
         if not url_obj:
             logger.info("handle_request, no url found.")
@@ -204,8 +197,10 @@ async def handle_request(request, path):
             logger.info(f"handle_request, filepath: {url_obj.filepath}, sending response: {url_obj.response}")
             return sanic_json(url_obj.response, HTTP_200, headers={"Content-type": "application/json"})
         # if execute is false then its a content file to be responsed
+        filepath = os.path.join(os.getcwd(), url_obj.filepath)
+        logger.info(f"handle_request, filepath: {filepath}")
         if not url_obj.execute:
-            filepath = os.path.join(os.getcwd(), url_obj.filepath)
+            logger.info("handle_request, response file is not executable")
             cwd = os.getcwd()
             response_filepath = filepath.replace(cwd+'/files', '')
             response_headers = {
@@ -220,6 +215,11 @@ async def handle_request(request, path):
                 # mime_type="application/metalink4+xml",
                 headers=response_headers
             )
+            # execute the file saved in the filepath and send response
+        result: object = await execute_file(filepath)
+        if not result:
+            return sanic_json({"success": False}, HTTP_500)
+        return sanic_json(result, HTTP_200)
     except Exception as ex:
         session.rollback()
         logger.exception(f"handle_request, exception: {ex}")

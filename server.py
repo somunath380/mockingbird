@@ -40,29 +40,7 @@ async def ping(request):
 
 
 
-# async def write_to_file(data, filepath, command):
-#     async with aiofiles.open(filepath, command) as file:
-#         await file.write(data)
-#     return
 
-
-
-
-# READ
-# @app.route('/file/download', methods=['POST'])
-# async def download(request):
-#     path = request.json.get('path')
-#     if not os.path.exists(path):
-#         return json({'msg': 'no path exists'}, 404)
-#     return await response.file_stream(
-#         path,
-#         chunk_size=1024,
-#         mime_type="application/metalink4+xml",
-#         headers={
-#             "Content-Disposition": 'Attachment; filename="nicer_name.meta4"',
-#             "Content-Type": "application/metalink4+xml",
-#         }
-#     )
 
 
 # UPDATE
@@ -75,12 +53,6 @@ async def ping(request):
 #     await write_to_file(file_obj.body, path, command="ab")
 #     return json({'msg':'file data modified'}, 200)
 
-
-# DELETE
-# @app.route('/file/delete', methods=['GET'])
-# async def delete_folder(request):
-#     os.system(f'rm -rf {basedir}')
-#     return json({'status': 'SUCCESS', 'msg': 'all folders deleted!'}, 200)
 
 
 if __name__ == "__main__":
