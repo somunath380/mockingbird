@@ -5,18 +5,19 @@ from typing import Dict, Text
 from db.models import Url
 from validations.validate import UrlSchema
 from db.connection import get_session
-from api.decorators import is_authorized, check_existing_url, check_file
+from api.decorators import is_authorized, check_existing_url, check_file, get_url
 from sanic.log import logger
 import os
 from api.helper import create_file_path, write_to_file, execute_file
 import json
-from common.constants import HTTP_500, HTTP_200, HTTP_404
+from sqlalchemy import update
+from common.constants import HTTP_500, HTTP_200, HTTP_404, HTTP_401
 
 default_folder_name: Text = 'uploads'
 
 class UploadFileHandler(BaseHandler):
     @is_authorized
-    @check_existing_url()
+    @check_existing_url(json_format=False)
     @check_file
     async def post(self, request, *args, **kwargs):
         """Upload file handler.
@@ -36,9 +37,9 @@ class UploadFileHandler(BaseHandler):
             identifier: Text = data.get("identifier")
             url: Text = data.get("url")
             method: Text = str(data.get("method")).upper()
-            body: Dict = json.loads(data.get("body", {}))
-            response: Dict = json.loads(data.get("response", {}))
-            headers: Dict = json.loads(data.get("headers", {}))
+            body: Dict = json.loads(data.get("body", "{}"))
+            response: Dict = json.loads(data.get("response", "{}"))
+            headers: Dict = json.loads(data.get("headers", "{}"))
             status_code: int = data.get("status_code")
             execute: bool = json.loads(data.get("execute"))
             file_obj: object = request.files.get("file")
@@ -116,7 +117,7 @@ class UrlHandler(BaseHandler):
         response: Dict = data.get("response", {})
         headers: Dict = data.get("headers", {})
         status_code: int = data.get("status_code")
-        logger.info("AddUrlHandler, POST, getting session.")
+        logger.info("UrlHandler, POST, getting session.")
         session = get_session()
         try:
             url_data = {
@@ -131,19 +132,19 @@ class UrlHandler(BaseHandler):
             }
             error: object = UrlSchema().validate(url_data)
             if error:
-                logger.error(f"AddUrlHandler, POST, error: {error}")
+                logger.error(f"UrlHandler, POST, error: {error}")
                 return self._send_response(HTTP_500, success=False, error_code=HTTP_500, error_msg=error)
             url_obj: Url = Url(**url_data)
             session.add(url_obj)
-            logger.info("AddUrlHandler, POST, added url in the database.")
+            logger.info("UrlHandler, POST, added url in the database.")
             session.commit()
             return self._send_response(HTTP_200, response_msg="url created", data={"url_id": url_obj.id})
         except Exception as exe:
-            logger.exception(f"AddUrlHandler, POST, error: {exe}")
+            logger.exception(f"UrlHandler, POST, error: {exe}")
             session.rollback()
             return self._send_response(HTTP_500, success=False, error_code=HTTP_500, error_msg=exe)
         finally:
-            logger.info("AddUrlHandler, POST, closing session.")
+            logger.info("UrlHandler, POST, closing session.")
             session.close()
 
     @is_authorized
@@ -176,6 +177,60 @@ class UrlHandler(BaseHandler):
             logger.info("UrlHandler, GET, closing session.")
             session.close()
     
+    @is_authorized
+    @get_url
+    async def put(self, request, *args, **kwargs):
+        url_obj: object = kwargs.get("url_obj")
+        data: Dict = request.json
+        url_id: int = data.get("id")
+        del data["id"]
+        session = get_session()
+        try:
+            statement = update(Url).where(Url.id==url_id).values(**data)
+            session.execute(statement)
+            session.commit()
+            return self._send_response(HTTP_200, True, "updated url")
+        except Exception as exe:
+            logger.exception(f"UrlHandler, PUT, error: {exe}")
+            session.rollback()
+            return self._send_response(HTTP_500, success=False, error_code=HTTP_500, error_msg=exe)
+        finally:
+            logger.info("UrlHandler, PUT, closing session.")
+            session.close()
+
+class DeleteUrlHandler(BaseHandler):
+    @is_authorized
+    async def delete(self, request, *args, **kwargs):
+        """delete url handler.
+        
+        This handler delete the url in the database for the given url_id or url_identifier.
+        Uses Auth to authorize request.
+        Args:
+            request (object): Sanic request object.
+        Returns:
+            json:
+                message: Text."""
+        logger.info("UrlHandler, GET, getting session.")
+        session = get_session()
+        try:
+            data: Dict = request.json
+            url_id: int = data.get("id", None)
+            if not url_id:
+                return self._send_response(HTTP_401, False, "url id required")
+            url_obj = session.query(Url).filter(Url.id==url_id).first()
+            if not url_obj:
+                return self._send_response(HTTP_404, False, "URL not found")
+            session.delete(url_obj)
+            session.commit()
+            return self._send_response(HTTP_200, True, "URL deleted")
+        except Exception as exe:
+            logger.exception(f"UploadFileHandler, DELETE, exception {exe}")
+            session.rollback()
+            return self._send_response(HTTP_500, success=False, error_code=HTTP_500, error_msg=exe)
+        finally:
+            logger.info("UploadFileHandler, DELETE, closing session.")
+            session.close()
+
 
 async def handle_request(request, path):
     session = get_session()

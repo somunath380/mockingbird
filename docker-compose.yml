@@ -10,6 +10,8 @@ services:
     restart: always
     ports:
       - "8888:8888"
+    environment:
+      - API_AUTH=${API_AUTH}
     volumes:
       - .:/app
 
@@ -18,7 +20,7 @@ services:
     container_name: postgres
     hostname: postgres
     ports:
-        - "5432:5432"
+        - "5433:5432"
     volumes:
         - mockdb_volume:/var/lib/postgresql/data
     environment:

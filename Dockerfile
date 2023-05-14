@@ -5,7 +5,6 @@ ENV DB_USER=somu
 ENV DB_PASSWORD=mypwd
 ENV DB_NAME=mockdb
 ENV DB_PORT=5432
-ENV API_AUTH=4c3527c1eab7ba0b155e3121eb15889d
 
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"

@@ -1,11 +1,13 @@
 from sanic import Sanic
 from sanic.response import json
 from db.setup_db import check_or_create_tables, close_all_db_sessions
-from urls import blueprint_v1
+from urls import blueprint_v1, blueprint_v2
 from sanic.log import logger
+
 
 app = Sanic(__name__)
 app.blueprint(blueprint_v1)
+app.blueprint(blueprint_v2)
 
 @app.listener("before_server_start")
 async def connect_to_db(app):
@@ -32,27 +34,6 @@ async def close_db_connection(app):
 @app.route('/', methods=['GET'])
 async def ping(request):
     return json({'response': 'pong!'}, 200)
-
-
-# @app.route("/mockingbird/<path:path>", methods=['GET', 'POST', 'PUT'])
-# async def catch_all(request, path):
-#     return json({"url_path": path, "method": request.method}, 200)
-
-
-
-
-
-
-# UPDATE
-# @app.route('/file/change', methods=['POST', 'PUT'])
-# async def change_file_contents(request):
-#     path = request.form.get('path')
-#     file_obj = request.files.get('file')
-#     if not os.path.exists(path):
-#         return json({'msg': 'no path exists'}, 404)
-#     await write_to_file(file_obj.body, path, command="ab")
-#     return json({'msg':'file data modified'}, 200)
-
 
 
 if __name__ == "__main__":

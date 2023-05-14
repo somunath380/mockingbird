@@ -5,7 +5,7 @@ from sanic.response import json as sanic_json
 from sanic.log import logger
 from db.connection import get_session
 from functools import wraps
-from common.constants import HTTP_401, HTTP_403, MAX_FILE_SIZE
+from common.constants import HTTP_401, HTTP_403, HTTP_404, MAX_FILE_SIZE
 from api.helper import create_basedir
 
 
@@ -23,7 +23,8 @@ def is_authorized(func):
             if auth_header is None:
                 logger.info("is_authorized, Invalid Authorization")
                 return sanic_json({"status": False, "message": "Invalid Authorization"}, HTTP_401)
-            api_auth: Text = auth_header[6:]
+            api_auth: Text = auth_header[7:]
+            print(os.environ.get("API_AUTH"))
             if api_auth != os.environ.get("API_AUTH"):
                 logger.info("is_authorized, Invalid Authorization")
                 return sanic_json({"status": False, "message": "Invalid Authorization"}, HTTP_401)
@@ -36,7 +37,7 @@ def is_authorized(func):
     return wrapper
 
 
-def check_existing_url(json_format=False):
+def check_existing_url(json_format):
     """Middleware to check if the url already exists or not.
     Args:
         json_format (bool): Default False.
@@ -108,3 +109,34 @@ def check_file(func):
             return sanic_json({"status": False, "message": "file size too large"}, HTTP_401)
         return await func(self, request, *args, **kwargs)
     return wrapper
+
+def get_url(func):
+    """Middleware to get url object.
+    Args: 
+        None.
+    Returns:
+        Sanic Response object or Handler Function.
+    """
+    @wraps(func)
+    async def wrapper(self, request, *args, **kwargs):
+        # get url object using the url_id or url_identifier given in request
+        data: Dict = request.json
+        url_id: int = data.get("id", None)
+        if url_id is None:
+            return sanic_json("url id required", HTTP_401)
+        # get the url obj from the db
+        session = get_session()
+        try:
+            url_obj = session.query(Url).filter(Url.id==url_id).first()
+            if not url_obj:
+                return sanic_json({"no url found"}, HTTP_404)
+            kwargs["url_obj"] = url_obj
+            return await func(self, request, *args, **kwargs)
+        except Exception as exe:
+            logger.exception(f"get_url, error occured, exception {exe}")
+            session.rollback()
+        finally:
+            session.close()
+    return wrapper
+
+
